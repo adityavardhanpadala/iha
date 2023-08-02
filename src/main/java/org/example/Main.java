@@ -13,12 +13,17 @@ import java.awt.*;
 import java.io.File;
 import java.util.*;
 import java.util.List;
-import java.util.logging.Logger;
+import java.util.logging.*;
 import java.util.Collections;
 
 // Press Shift twice to open the Search Everywhere dialog and type `show whitespaces`,
 // then press Enter. You can now see whitespace characters in your code.
 public class Main {
+    static Logger log = Logger.getLogger(Main.class.getName());
+    public static void setupLogging() {
+        // Add better formatting later.
+        log.setLevel(Level.INFO);
+    }
     public static void setupSoot(String[] args) {
         // Setup Soot.
         G.reset();
@@ -57,17 +62,21 @@ public class Main {
     }
     public static void main(String[] args) {
 
-        System.out.println("IHA lmao");
+        setupLogging();
         setupSoot(args);
 
         Scene.v().loadNecessaryClasses();
+        Scene.v().loadBasicClasses();
+        Scene.v().loadDynamicClasses();
+
+        List<SootMethod> ihaFiltered = new ArrayList<SootMethod>();
+
         PackManager.v().getPack("jtp").add(new Transform("jtp.iha", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
                 if(Utils.isAndroidMethod(body.getMethod())){
                     return;
                 }
-                System.out.println("---------------------------------------------------------------------------");
                 String met = body.getMethod().getName();
                 String clx = body.getMethod().getDeclaringClass().getName();
 
@@ -75,38 +84,38 @@ public class Main {
 
                 Map<SootMethod, InvokeExpr> filters = new HashMap<SootMethod, InvokeExpr>();
 
-                // Collect all the invokes from the body.
                 for (Unit unit: units){
                     if(unit instanceof InvokeStmt is) {
                         InvokeExpr ie = is.getInvokeExpr();
-                        System.out.println("[St InvokeExpr] " + ie);
+//                        System.out.println("[St InvokeExpr] " + ie);
                         SootMethod cmet = getCallee(ie);
                         if (Utils.isComms(cmet)) {
-                            System.out.println("[IHA]" + cmet.getDeclaringClass().getName() + "--" + cmet.getName());
+                            log.info("[IHA]" + clx+"/"+met + " calls "+ cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+                            ihaFiltered.add(body.getMethod());
                         }
                     }
 
                     if(unit instanceof AssignStmt as) {
                          if (as.getRightOp() instanceof InvokeExpr ie){
-                             System.out.println("[AS InvokeExpr] " + ie);
+//                             System.out.println("[AS InvokeExpr] " + ie);
                              getCallee(ie);
                              SootMethod cmet = getCallee(ie);
                              if (Utils.isComms(cmet)) {
-                                 System.out.println("[IHA]" + cmet.getDeclaringClass().getName() + "--" + cmet.getName());
+                                 log.info("[IHA]" + clx+"/"+met + " calls "+ cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+                                 ihaFiltered.add(body.getMethod());
                              }
                          }
 
                     }
                 }
 
-                // Check the function being invoked is in our whitelist of the functions.
-
                 body.validate();
             }
         }));
 
+
+
         PackManager.v().runPacks();
-//        PackManager.v().writeOutput();
     }
 
 }

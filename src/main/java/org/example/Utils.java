@@ -84,6 +84,7 @@ public class Utils {
             return false;
         }
         String clsSig = sootMethod.getDeclaringClass().getName();
+//        System.out.println("Checking "+ clsSig);
         return netPkgs.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
 
