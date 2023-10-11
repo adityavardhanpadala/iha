@@ -22,7 +22,7 @@ public class Main {
     static Logger log = Logger.getLogger(Main.class.getName());
     public static void setupLogging() {
         // Add better formatting later.
-        log.setLevel(Level.INFO);
+        log.setLevel(Level.INFO);   
     }
     public static void setupSoot(String[] args) {
         // Setup Soot.
@@ -87,25 +87,24 @@ public class Main {
                 for (Unit unit: units){
                     if(unit instanceof InvokeStmt is) {
                         InvokeExpr ie = is.getInvokeExpr();
-//                        System.out.println("[St InvokeExpr] " + ie);
                         SootMethod cmet = getCallee(ie);
                         if (Utils.isComms(cmet)) {
-                            log.info("[IHA]" + clx+"/"+met + " calls "+ cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+                            log.info("[IHA]" + clx+"/"+met + " calls "+ 
+                                    cmet.getDeclaringClass().getName() + "/" + cmet.getName());
                             ihaFiltered.add(body.getMethod());
                         }
                     }
 
                     if(unit instanceof AssignStmt as) {
                          if (as.getRightOp() instanceof InvokeExpr ie){
-//                             System.out.println("[AS InvokeExpr] " + ie);
                              getCallee(ie);
                              SootMethod cmet = getCallee(ie);
                              if (Utils.isComms(cmet)) {
-                                 log.info("[IHA]" + clx+"/"+met + " calls "+ cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+                                 log.info("[IHA]" + clx+"/"+met + " calls "+ 
+                                         cmet.getDeclaringClass().getName() + "/" + cmet.getName());
                                  ihaFiltered.add(body.getMethod());
                              }
                          }
-
                     }
                 }
 
