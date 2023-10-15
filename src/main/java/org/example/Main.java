@@ -7,7 +7,6 @@ import soot.jimple.*;
 import soot.toDex.Debug;
 import soot.util.Chain;
 
-
 import javax.swing.plaf.synth.SynthStyle;
 import java.awt.*;
 import java.io.File;
@@ -20,10 +19,12 @@ import java.util.Collections;
 // then press Enter. You can now see whitespace characters in your code.
 public class Main {
     static Logger log = Logger.getLogger(Main.class.getName());
+
     public static void setupLogging() {
         // Add better formatting later.
-        log.setLevel(Level.INFO);   
+        log.setLevel(Level.INFO);
     }
+
     public static void setupSoot(String[] args) {
         // Setup Soot.
         G.reset();
@@ -42,7 +43,7 @@ public class Main {
 
     }
 
-    public static SootMethod getCallee(InvokeExpr ie){
+    public static SootMethod getCallee(InvokeExpr ie) {
         SootMethod met = null;
 
         if (ie instanceof VirtualInvokeExpr || ie instanceof InterfaceInvokeExpr) {
@@ -50,18 +51,18 @@ public class Main {
             SootMethodRef calleeMethodRef = ie.getMethodRef();
             SootMethod calleeMethod = calleeMethodRef.resolve();
             return calleeMethod;
-        }
-        else if (ie instanceof StaticInvokeExpr || ie instanceof SpecialInvokeExpr) {
+        } else if (ie instanceof StaticInvokeExpr || ie instanceof SpecialInvokeExpr) {
             // For static or special invocations, use getMethod()
             SootMethod calleeMethod = ie.getMethod();
             return calleeMethod;
-        }
-        else {
+        } else {
             return met;
         }
     }
+
     public static void main(String[] args) {
 
+        System.out.println(args);
         setupLogging();
         setupSoot(args);
 
@@ -71,50 +72,63 @@ public class Main {
 
         List<SootMethod> ihaFiltered = new ArrayList<SootMethod>();
 
+        HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
+
         PackManager.v().getPack("jtp").add(new Transform("jtp.iha", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
-                if(Utils.isAndroidMethod(body.getMethod())){
+                if (Utils.isAndroidMethod(met)) {
                     return;
                 }
-                String met = body.getMethod().getName();
-                String clx = body.getMethod().getDeclaringClass().getName();
+                SootMethod smet = body.getMethod(); 
+                String met = smet.getName();
+                String clx = smet.getDeclaringClass().getName();
 
                 Chain<Unit> units = body.getUnits();
 
                 Map<SootMethod, InvokeExpr> filters = new HashMap<SootMethod, InvokeExpr>();
 
-                for (Unit unit: units){
-                    if(unit instanceof InvokeStmt is) {
+                for (Unit unit : units) {
+
+                    if (unit instanceof InvokeStmt is) {
                         InvokeExpr ie = is.getInvokeExpr();
                         SootMethod cmet = getCallee(ie);
+                        if (cmet.isNative()) {
+                            nativeAnalysisRequired.add(smet)
+                        }
                         if (Utils.isComms(cmet)) {
-                            log.info("[IHA]" + clx+"/"+met + " calls "+ 
+                            log.info("[IHA]" + clx + "/" + met + " calls " +
                                     cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-                            ihaFiltered.add(body.getMethod());
+                            ihaFiltered.add(smet);
                         }
                     }
 
-                    if(unit instanceof AssignStmt as) {
-                         if (as.getRightOp() instanceof InvokeExpr ie){
-                             getCallee(ie);
-                             SootMethod cmet = getCallee(ie);
-                             if (Utils.isComms(cmet)) {
-                                 log.info("[IHA]" + clx+"/"+met + " calls "+ 
-                                         cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-                                 ihaFiltered.add(body.getMethod());
-                             }
-                         }
+                    if (unit instanceof AssignStmt as) {
+                        if (as.getRightOp() instanceof InvokeExpr ie) {
+                            getCallee(ie);
+                            SootMethod cmet = getCallee(ie);
+                            if (cmet.isNative()) {
+                                nativeAnalysisRequired.add(smet);
+                            }
+
+                            if (Utils.isComms(cmet)) {
+                                log.info("[IHA]" + clx + "/" + met + " calls " +
+                                        cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+                                ihaFiltered.add(smet);
+                            }
+                        }
                     }
                 }
-
-                body.validate();
+                // We don't need to validate since we are not modifying the body.
+                // body.validate();
             }
         }));
 
-
-
         PackManager.v().runPacks();
+
+        // nativeAnalysisRequired has all the methods that need to be analyzed 
+        // further.
+        
     }
 
 }

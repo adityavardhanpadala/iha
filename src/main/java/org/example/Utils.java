@@ -68,7 +68,7 @@ public class Utils {
 
             "java.net.ResponseCache: get",
 
-            "java.net.ServerSocket: receive", //wait for gpt
+            "java.net.ServerSocket: receive", // wait for gpt
 
             "java.net.Socket: getInputStream",
             "java.net.Socket: getOutputStream",
@@ -84,7 +84,8 @@ public class Utils {
             // Ignored
             // "java.net.DatagramChannel",
 
-            // Ignoring certificate based methods and just using the methods that handle data.
+            // Ignoring certificate based methods and just using the methods that handle
+            // data.
             "javax.net.ssl.HttpURLConnection: getErrorStream",
             "javax.net.ssl.HttpURLConnection: getHeaderField",
             "javax.net.ssl.HttpURLConnection: getRequestMethod",
@@ -103,15 +104,15 @@ public class Utils {
 
             "javax.net.ssl.SSLSocket: getInputStream",
             "javax.net.ssl.SSLSocket: getReceiveBufferSize",
-//
-//            "javax.net.ssl.SSLServerSocket",
-//            "javax.net.ssl.SSLServerSocketChannel",
-//            "javax.net.ssl.SSLSocketChannel",
-//            "javax.net.ssl.HttpsURLConnection",
-//            "javax.net.ssl.SSLEngine",
-//            "javax.net.ssl.SSLSession",
-//            "javax.net.ssl.SSLEngineResult",
-//            "javax.net.ssl.SSLContext",
+            //
+            // "javax.net.ssl.SSLServerSocket",
+            // "javax.net.ssl.SSLServerSocketChannel",
+            // "javax.net.ssl.SSLSocketChannel",
+            // "javax.net.ssl.HttpsURLConnection",
+            // "javax.net.ssl.SSLEngine",
+            // "javax.net.ssl.SSLSession",
+            // "javax.net.ssl.SSLEngineResult",
+            // "javax.net.ssl.SSLContext",
 
             "android.net.wifi.ScanResult: getWifiSsid",
             "android.net.wifi.WifiInfo: getSSID",
@@ -131,18 +132,18 @@ public class Utils {
             "android.net.LocalSocket: getReceiveBufferSize",
 
             // Ignored for now. Check later based on results from IHA stats.
-            //"android.net.NetworkInfo",
-            //"android.net.LinkProperties",
-            //"android.net.NetworkCapabilities",
-            //"android.net.ConnectivityManager",
-            //"android.net.Network",
+            // "android.net.NetworkInfo",
+            // "android.net.LinkProperties",
+            // "android.net.NetworkCapabilities",
+            // "android.net.ConnectivityManager",
+            // "android.net.Network",
 
             "android.net.NetworkRequest: getCapabilities",
 
-//            "android.webkit.WebView", this is a sink idiot
-//            "android.net.DhcpInfo",
-//            "android.webkit.WebViewClient",
-//            "android.webkit.WebViewDatabase",
+            // "android.webkit.WebView", this is a sink idiot
+            // "android.net.DhcpInfo",
+            // "android.webkit.WebViewClient",
+            // "android.webkit.WebViewDatabase",
             "android.bluetooth.BluetoothDevice: getAddress",
             "android.bluetooth.BluetoothDevice: getName",
             "android.bluetooth.BluetoothDevice: getUuids",
@@ -155,7 +156,7 @@ public class Utils {
             "android.bluetooth.BluetoothGatt: readCharacteristic",
             "android.bluetooth.BluetoothGatt: readDescriptor",
 
-            //TODO: analyse how the request is being used.
+            // TODO: analyse how the request is being used.
             "okhttp3.OkHttpClient.newCall: execute",
 
             // TODO: in case of enqueue, the analysis should determine the
@@ -163,11 +164,10 @@ public class Utils {
             // Cases like this is where we taint the field. Check mariana trench docs .
             "okhttp3.OkHttpClient.newCall: enqueue"
 
-            //"org.apache.http",
-            //"org.apache.log4j" sinks
+    // "org.apache.http",
+    // "org.apache.log4j" sinks
 
     );
-
 
     // TODO: Check MTP and media.tv packages.
     public static String getPackageName(String apkPath) {
@@ -181,43 +181,45 @@ public class Utils {
         return packageName;
     }
 
-    public static boolean isAndroidMethod(SootMethod sootMethod){
+    public static boolean isAndroidMethod(SootMethod sootMethod) {
         String clsSig = sootMethod.getDeclaringClass().getName();
-        List<String> androidPrefixPkgNames = Arrays.asList("android.", "com.google.android", "androidx.","kotlinx.","kotlin.","okhttp3");
+        List<String> androidPrefixPkgNames = Arrays.asList("android.", "com.google.android", "androidx.", "kotlinx.",
+                "kotlin.", "okhttp3");
         return androidPrefixPkgNames.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
 
-    public static boolean isComms(SootMethod sootMethod){
-        if (sootMethod == null){
+    public static boolean isCommsa(SootMethod sootMethod) {
+        if (sootMethod == null) {
             return false;
         }
 
         String clsName = sootMethod.getDeclaringClass().getName();
         String metName = sootMethod.getName();
         clsName = clsName + ": " + metName;
-//        String clsName = sootMethod.getBytecodeSignature();
+        // String clsName = sootMethod.getBytecodeSignature();
         System.out.println("Checking if " + clsName + " is a network method");
 
         return netPkgs.stream().map(clsName::contains).reduce(false, (res, curr) -> res || curr);
     }
 
-    public static boolean isCommsq(SootMethod sootMethod){
-        if (sootMethod == null){
+    public static boolean isComms(SootMethod sootMethod) {
+        if (sootMethod == null) {
             return false;
         }
-
+    
         String clsName = sootMethod.getDeclaringClass().getName();
         String metName = sootMethod.getName();
-        String fullMethodName = clsName + ": " + metName;
-
-        // Use a logging framework for logging if necessary
-        System.out.println("Checking if " + fullMethodName + " is a network method");
-
-        // Use anyMatch for a more efficient and readable check
-        return netPkgs.stream().anyMatch(fullMethodName::contains);
+        String signature = clsName + ": " + metName;
+        
+        for (String netPkg : netPkgs) {
+            if (signature.contains(netPkg) | netPkg.contains(signature)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    public static boolean isWhiteListed(SootMethod sootMethod, List<String> whitelist){
+    public static boolean isWhiteListed(SootMethod sootMethod, List<String> whitelist) {
         String clsSig = sootMethod.getDeclaringClass().getName();
         return whitelist.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
