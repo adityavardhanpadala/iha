@@ -77,16 +77,18 @@ public class Main {
         PackManager.v().getPack("jtp").add(new Transform("jtp.iha", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
-                if (Utils.isAndroidMethod(met)) {
+                SootMethod smet = body.getMethod();
+                if (Utils.isAndroidMethod(smet)) {
                     return;
                 }
-                SootMethod smet = body.getMethod(); 
                 String met = smet.getName();
                 String clx = smet.getDeclaringClass().getName();
 
                 Chain<Unit> units = body.getUnits();
 
                 Map<SootMethod, InvokeExpr> filters = new HashMap<SootMethod, InvokeExpr>();
+                
+
 
                 for (Unit unit : units) {
 
@@ -94,7 +96,10 @@ public class Main {
                         InvokeExpr ie = is.getInvokeExpr();
                         SootMethod cmet = getCallee(ie);
                         if (cmet.isNative()) {
-                            nativeAnalysisRequired.add(smet)
+                            nativeAnalysisRequired.add(smet);
+                            System.out.println("Native call " + ie.toString());
+                            System.out.println("----------------------------------");
+                            System.out.println(body.toString());
                         }
                         if (Utils.isComms(cmet)) {
                             log.info("[IHA]" + clx + "/" + met + " calls " +
@@ -126,9 +131,53 @@ public class Main {
 
         PackManager.v().runPacks();
 
-        // nativeAnalysisRequired has all the methods that need to be analyzed 
-        // further.
-        
+        // nativeAnalysisRequired has all the methods that need to be analyzed,
+        // Now for each and every argument that this JNI function takes, we need to
+        // analyze where this argument is read again in the function
+        // for (Body body : nativeAnalysisRequired.stream().map(SootMethod::getActiveBody).toList()) {
+        //     SootMethod met = body.getMethod();
+
+        //     Chain<Unit> units = body.getUnits();
+
+        //     for (Unit unit : units) {
+        //         System.out.println(unit.toString());
+        //         // Check if the unit is an invoke statement
+        //         if (unit instanceof InvokeStmt is) {
+        //             InvokeExpr ie = is.getInvokeExpr();
+        //             SootMethod cmet = getCallee(ie);
+        //             if (cmet.isNative()) {
+        //                 System.out.println(ie.toString());
+        //                 // Now get all the arguments of this native function
+        //                 List<Value> pargs = ie.getArgs();
+        //                 // Now for each argument, we need to find where it is read again
+        //                 for (Value arg : pargs) {
+        //                     System.out.println(arg.getUseBoxes());
+        //                 }
+        //             }
+
+        //         }
+        //         if (unit instanceof AssignStmt) {
+        //             AssignStmt as = (AssignStmt) unit;
+        //             Value rightOp = as.getRightOp();
+        //             if (rightOp instanceof InvokeExpr) {
+        //                 InvokeExpr ie = (InvokeExpr) rightOp;
+        //                 SootMethod cmet = getCallee(ie);
+        //                 if (cmet.isNative()) {
+        //                     System.out.println(ie.toString());
+        //                     // Now get all the arguments of this native function
+        //                     List<Value> pargs = ie.getArgs();
+        //                     // Now for each argument, we need to find where it is read again
+        //                     for (Value arg : pargs) {
+        //                         System.out.println(arg.getUseBoxes());
+        //                     }
+        //                 }
+
+        //             }
+        //         }
+        //     }
+
+
+        // }
     }
 
 }
