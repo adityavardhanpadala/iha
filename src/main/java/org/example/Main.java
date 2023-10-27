@@ -2,7 +2,6 @@ package org.example;
 
 import soot.*;
 import soot.options.Options;
-import soot.*;
 import soot.jimple.*;
 import soot.toDex.Debug;
 import soot.util.Chain;
@@ -76,16 +75,19 @@ public class Main {
 
     public static void main(String[] args) {
 
-        System.out.println(args);
-        setupLogging();
+        if(args.length < 2) {
+            System.out.println("Usage: java -jar iha.jar <path to android jars> <path to apk>");
+            System.exit(1);
+        }
+
         setupSoot(args);
+        setupLogging();
 
         Scene.v().loadNecessaryClasses();
         Scene.v().loadBasicClasses();
         Scene.v().loadDynamicClasses();
 
-        List<SootMethod> ihaFiltered = new ArrayList<SootMethod>();
-
+        HashSet<SootMethod> ihaFiltered = new HashSet<>();
         HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
 
         PackManager.v().getPack("jtp").add(new Transform("jtp.iha", new BodyTransformer() {
@@ -106,41 +108,22 @@ public class Main {
 
                     if (unit instanceof InvokeStmt is) {
                         InvokeExpr ie = is.getInvokeExpr();
-                        SootMethod cmet = getCallee(ie);
-                        if (cmet.isNative()) {
-                            nativeAnalysisRequired.add(smet);
-                        }
-                        if (Utils.isComms(cmet)) {
-                            log.info("[IHA]" + clx + "/" + met + " calls " +
-                                    cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-                            ihaFiltered.add(smet);
-                        }
+                        analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
                     }
 
                     if (unit instanceof AssignStmt as) {
                         if (as.getRightOp() instanceof InvokeExpr ie) {
-                            getCallee(ie);
-                            SootMethod cmet = getCallee(ie);
-                            if (cmet.isNative()) {
-                                nativeAnalysisRequired.add(smet);
-                            }
-
-                            if (Utils.isComms(cmet)) {
-                                log.info("[IHA]" + clx + "/" + met + " calls " +
-                                        cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-                                ihaFiltered.add(smet);
-                            }
+                            analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
                         }
                     }
                 }
-                // We don't need to validate since we are not modifying the body.
-                // body.validate();
             }
         }));
 
         // For methods with JNI, we need to maintain a db of how these methods are used.
-        // For now we will just maintain a record of how many times the arguments to the
+        // For now, we will just maintain a record of how many times the arguments to the
         // native method are read and written to.
+
         PackManager.v().getPack("jtp").add(new Transform("jtp.native", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
@@ -164,59 +147,111 @@ public class Main {
                         }
                     }
                     if (iex != null && iex.getMethod().isNative()) {
+//                        printArgTypes(iex.getArgs());
                         for (Value arg : iex.getArgs()) {
                             ret = analyzeArgument(arg, unit, units);
                         }
                     }
                     if(ret != null) {
-                        log.info("[native] Analyzing " + smet.getSignature() + "result: " + ret.toString());
+                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
                     }
                 }
             }
         }));
 
         PackManager.v().runPacks();
-
-
     }
-    public static ArgumentAnalysisResult analyzeArgument(Value arg, Unit pt, Chain<Unit> units) {
-        ArgumentAnalysisResult result = new ArgumentAnalysisResult();
-        result.unit = pt.toString();
-        if (arg instanceof Local) {
-            Local localArg = (Local) arg;
-            result.argumentName = localArg.getName();
 
-            boolean start = false;
-            for (Unit unit : units) {
+    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, HashSet<SootMethod> nativeAnalysisRequired, HashSet<SootMethod> ihaFiltered) {
+        SootMethod cmet = getCallee(ie);
+        if(cmet == null) {
+            return;
+        }
+        if (cmet.isNative()) {
+            nativeAnalysisRequired.add(smet);
+        }
 
-                // We only care about the reads and writes after the function call.
-                if (unit.equals(pt)) {
-                    start = true;
-                    continue;
-                }
+        if (Utils.isComms(cmet)) {
+            log.info("[IHA]" + clx + "/" + met + " calls " +
+                    cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+            ihaFiltered.add(smet);
+        }
+    }
 
-                if (start) {
-                    if (unit.getUseBoxes().stream().anyMatch(useBox -> useBox.getValue().equals(localArg))) {
-                        result.readCount++;
+    public static void printArgTypes(List<Value> args) {
+        String res = "";
+        for (Value arg : args) {
+            if (arg instanceof Local localArg) {
+                log.info("Local: " + localArg.getType().toString());
+            }
+            else if (arg instanceof Constant constantArg) {
+                log.info("Constant: " + constantArg.getType().toString());
+            }
+            else if (arg instanceof FieldRef fieldRef) {
+                log.info("FieldRef: " + fieldRef.getField().getType().toString());
+            }
+            else if (arg instanceof Ref ref) {
+                log.info("Ref: " + ref.getType().toString());
+            }
+        }
+    }
+        public static ArgumentAnalysisResult analyzeArgument(Value arg, Unit pt, Chain<Unit> units) {
+            ArgumentAnalysisResult result = new ArgumentAnalysisResult();
+            result.unit = pt.toString();
+            if (arg instanceof Local) {
+                Local localArg = (Local) arg;
+                result.argumentName = localArg.getName();
+
+                boolean start = false;
+                for (Unit unit : units) {
+
+                    // We only care about the reads and writes after the function call.
+                    if (unit.equals(pt)) {
+                        start = true;
+                        continue;
                     }
-                    if (unit.getDefBoxes().stream().anyMatch(defBox -> defBox.getValue().equals(localArg))) {
-                        result.writeCount++;
+
+                    if (start) {
+                        if (unit.getUseBoxes().stream().anyMatch(useBox -> useBox.getValue().equals(localArg))) {
+                            result.readCount++;
+                        }
+                        if (unit.getDefBoxes().stream().anyMatch(defBox -> defBox.getValue().equals(localArg))) {
+                            result.writeCount++;
+                        }
                     }
                 }
             }
-        } else if (arg instanceof Constant) {
-            result.argumentName = arg.toString();
-        } else if (arg instanceof FieldRef) {
-            // This sets a field in the class may be used later in the apk so we need to track it.
-            FieldRef fieldRef = (FieldRef) arg;
-            result.argumentName = fieldRef.getField().getName();
-            result.writeCount++;
+            else if (arg instanceof Constant) {
+                result.argumentName = arg.toString();
+            }
+            else if (arg instanceof FieldRef fieldRef) {
+                // This sets a field in the class may be used later in the apk so we need to track it.
+                result.argumentName = fieldRef.getField().getName();
+                result.writeCount++;
+            }
+            else if (arg instanceof ArrayRef arrayRef) {
+                result.argumentName = arrayRef.toString();
+
+                boolean start = false;
+                for (Unit unit : units) {
+                    if (unit.equals(pt)) {
+                        start = true;
+                        continue;
+                    }
+
+                    if (start) {
+                        if (unit.getUseBoxes().stream().anyMatch(useBox -> useBox.getValue().equals(arrayRef))) {
+                            result.readCount++;
+                        }
+                        if (unit.getDefBoxes().stream().anyMatch(defBox -> defBox.getValue().equals(arrayRef))) {
+                            result.writeCount++;
+                        }
+                    }
+                }
+            }
+            else {
+                log.warning("Unhandled argument type: " + arg.getClass().getName());
+            }
+            return result;
         }
-//        else {
-//            log.warning("Unhandled argument type: " + arg.getClass().getName());
-//        }
-        return result;
-    }
-
-
 }
