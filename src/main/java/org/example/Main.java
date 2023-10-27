@@ -3,15 +3,11 @@ package org.example;
 import soot.*;
 import soot.options.Options;
 import soot.jimple.*;
-import soot.toDex.Debug;
 import soot.util.Chain;
 
-import javax.swing.plaf.synth.SynthStyle;
-import java.awt.*;
-import java.io.Console;
-import java.io.File;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.*;
 import java.util.Collections;
 import java.util.logging.Formatter;
@@ -46,7 +42,8 @@ public class Main {
         Options.v().set_prepend_classpath(true);
         Options.v().set_validate(true);
         Options.v().set_src_prec(Options.src_prec_apk);
-        Options.v().set_output_format(Options.output_format_dex);
+//        Options.v().set_output_format(Options.output_format_dex);
+        Options.v().set_output_format(Options.output_format_none);
         Options.v().set_android_jars(args[0]);
         Options.v().set_process_dir(Collections.singletonList(args[1]));
         Options.v().set_include_all(true);
@@ -87,10 +84,10 @@ public class Main {
         Scene.v().loadBasicClasses();
         Scene.v().loadDynamicClasses();
 
-        HashSet<SootMethod> ihaFiltered = new HashSet<>();
+        ConcurrentHashMap<SootMethod, String> ihaFiltered = new ConcurrentHashMap<>();
         HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
 
-        PackManager.v().getPack("jtp").add(new Transform("jtp.iha", new BodyTransformer() {
+        PackManager.v().getPack("jap").add(new Transform("jap.iha", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
                 SootMethod smet = body.getMethod();
@@ -124,7 +121,7 @@ public class Main {
         // For now, we will just maintain a record of how many times the arguments to the
         // native method are read and written to.
 
-        PackManager.v().getPack("jtp").add(new Transform("jtp.native", new BodyTransformer() {
+        PackManager.v().getPack("jap").add(new Transform("jap.native", new BodyTransformer() {
             @Override
             protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
                 Chain<Unit> units = body.getUnits();
@@ -153,16 +150,21 @@ public class Main {
                         }
                     }
                     if(ret != null) {
-                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
+//                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
                     }
                 }
             }
         }));
 
         PackManager.v().runPacks();
+
+        // We don't need to write the output, but we do need this function to wait till the analysis
+        // Finishes so that we can print final results.
+        PackManager.v().writeOutput();
+        System.out.println("IHA filtered methods: " + ihaFiltered);
     }
 
-    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, HashSet<SootMethod> nativeAnalysisRequired, HashSet<SootMethod> ihaFiltered) {
+    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, HashSet<SootMethod> nativeAnalysisRequired, ConcurrentHashMap<SootMethod, String> ihaFiltered) {
         SootMethod cmet = getCallee(ie);
         if(cmet == null) {
             return;
@@ -172,9 +174,8 @@ public class Main {
         }
 
         if (Utils.isComms(cmet)) {
-            log.info("[IHA]" + clx + "/" + met + " calls " +
-                    cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-            ihaFiltered.add(smet);
+//            log.info("[IHA]" + clx + "/" + met + " calls " + cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+            ihaFiltered.put(smet, cmet.getSignature());
         }
     }
 
