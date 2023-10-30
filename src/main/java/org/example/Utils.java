@@ -188,20 +188,6 @@ public class Utils {
         return androidPrefixPkgNames.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
 
-    public static boolean isCommsa(SootMethod sootMethod) {
-        if (sootMethod == null) {
-            return false;
-        }
-
-        String clsName = sootMethod.getDeclaringClass().getName();
-        String metName = sootMethod.getName();
-        clsName = clsName + ": " + metName;
-        // String clsName = sootMethod.getBytecodeSignature();
-        System.out.println("Checking if " + clsName + " is a network method");
-
-        return netPkgs.stream().map(clsName::contains).reduce(false, (res, curr) -> res || curr);
-    }
-
     public static boolean isComms(SootMethod sootMethod) {
         if (sootMethod == null) {
             return false;
