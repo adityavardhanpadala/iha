@@ -12,6 +12,8 @@ import java.util.logging.*;
 import java.util.Collections;
 import java.util.logging.Formatter;
 
+import static org.example.Utils.setupSoot;
+
 // Press Shift twice to open the Search Everywhere dialog and type `show whitespaces`,
 // then press Enter. You can now see whitespace characters in your code.
 public class Main {
@@ -34,23 +36,80 @@ public class Main {
         log.addHandler(handler);
     }
 
-    public static void setupSoot(String[] args) {
-        // Setup Soot.
-        G.reset();
-        Options.v().set_allow_phantom_refs(true);
-        Options.v().set_whole_program(true);
-        Options.v().set_prepend_classpath(true);
-        Options.v().set_validate(true);
-        Options.v().set_src_prec(Options.src_prec_apk);
-//        Options.v().set_output_format(Options.output_format_dex);
-        Options.v().set_output_format(Options.output_format_none);
-        Options.v().set_android_jars(args[0]);
-        Options.v().set_process_dir(Collections.singletonList(args[1]));
-        Options.v().set_include_all(true);
-        Options.v().set_process_multiple_dex(true);
-        Options.v().set_output_dir("./tmp");
-        Options.v().set_force_overwrite(true);
 
+
+    public static void main(String[] args) {
+
+        if(args.length < 2) {
+            System.out.println("Usage: java -jar iha.jar <path to android jars> <path to apk>");
+            System.exit(1);
+        }
+
+        setupSoot(args);
+        setupLogging();
+
+        Scene.v().loadNecessaryClasses();
+        Scene.v().loadBasicClasses();
+        Scene.v().loadDynamicClasses();
+
+        ConcurrentHashMap<String, String> ihaFiltered = new ConcurrentHashMap<>();
+
+        for(SootClass cls : Scene.v().getClasses()) {
+            List<SootMethod> methods = new ArrayList<>(cls.getMethods());
+            for(SootMethod smet : methods) {
+
+                if(Utils.isAndroidMethod(smet)) {
+                    continue;
+                }
+
+                Body body = null;
+                try {
+                    body = smet.retrieveActiveBody();
+                } catch (Exception e) {
+                    continue;
+                }
+
+                if(body == null) {
+                    continue;
+                }
+
+
+                Chain<Unit> units = body.getUnits();
+                for (Unit unit: units){
+                    SootMethod cmet = null;
+                    if(unit instanceof InvokeStmt is) {
+                        InvokeExpr iex = is.getInvokeExpr();
+                        cmet = analyzeCallee(smet, iex);
+                    }
+                    else if (unit instanceof AssignStmt) {
+                        Value right = ((AssignStmt) unit).getRightOp();
+                        if(right instanceof InvokeExpr iex) {
+                            cmet = analyzeCallee(smet, iex);
+                        }
+                    }
+                    if(cmet == null){
+                        continue;
+                    }
+                    ihaFiltered.put(smet.getBytecodeSignature(), cmet.getBytecodeSignature());
+                }
+            }
+        }
+
+        for (Map.Entry<String, String> entry : ihaFiltered.entrySet()) {
+            System.out.println("[IHA] " + entry.getKey() + "\t:\t" + entry.getValue());
+        }
+    }
+
+    private static SootMethod analyzeCallee(SootMethod smet, InvokeExpr ie) {
+        SootMethod cmet = getCallee(ie);
+
+        if (Utils.isComms(cmet)) {
+//            log.info("[IHA]" + smet.getDeclaringClass().getName() + "/" + smet.getName() + " calls " + cmet.getDeclaringClass().getName() + "/" + cmet.getName());
+            return cmet;
+        }
+        else {
+            return cmet;
+        }
     }
 
     public static SootMethod getCallee(InvokeExpr ie) {
@@ -69,116 +128,6 @@ public class Main {
             return met;
         }
     }
-
-    public static void main(String[] args) {
-
-        if(args.length < 2) {
-            System.out.println("Usage: java -jar iha.jar <path to android jars> <path to apk>");
-            System.exit(1);
-        }
-
-        setupSoot(args);
-        setupLogging();
-
-        Scene.v().loadNecessaryClasses();
-        Scene.v().loadBasicClasses();
-        Scene.v().loadDynamicClasses();
-
-        ConcurrentHashMap<SootMethod, String> ihaFiltered = new ConcurrentHashMap<>();
-        HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
-
-        PackManager.v().getPack("jap").add(new Transform("jap.iha", new BodyTransformer() {
-            @Override
-            protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
-                SootMethod smet = body.getMethod();
-                if (Utils.isAndroidMethod(smet)) {
-                    return;
-                }
-                String met = smet.getName();
-                String clx = smet.getDeclaringClass().getName();
-
-                Chain<Unit> units = body.getUnits();
-
-                Map<SootMethod, InvokeExpr> filters = new HashMap<SootMethod, InvokeExpr>();
-
-                for (Unit unit : units) {
-
-                    if (unit instanceof InvokeStmt is) {
-                        InvokeExpr ie = is.getInvokeExpr();
-                        analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
-                    }
-
-                    if (unit instanceof AssignStmt as) {
-                        if (as.getRightOp() instanceof InvokeExpr ie) {
-                            analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
-                        }
-                    }
-                }
-            }
-        }));
-
-        // For methods with JNI, we need to maintain a db of how these methods are used.
-        // For now, we will just maintain a record of how many times the arguments to the
-        // native method are read and written to.
-
-        PackManager.v().getPack("jap").add(new Transform("jap.native", new BodyTransformer() {
-            @Override
-            protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
-                Chain<Unit> units = body.getUnits();
-                SootMethod smet = body.getMethod();
-
-                if (Utils.isAndroidMethod(smet)) {
-                    return;
-                }
-
-                for(Unit unit: units) {
-                    InvokeExpr iex = null;
-                    ArgumentAnalysisResult ret = null;
-                    if(unit instanceof InvokeStmt) {
-                        iex = ((InvokeStmt) unit).getInvokeExpr();
-                    }
-                    else if (unit instanceof AssignStmt) {
-                        Value right = ((AssignStmt) unit).getRightOp();
-                        if(right instanceof InvokeExpr) {
-                            iex = (InvokeExpr) right;
-                        }
-                    }
-                    if (iex != null && iex.getMethod().isNative()) {
-//                        printArgTypes(iex.getArgs());
-                        for (Value arg : iex.getArgs()) {
-                            ret = analyzeArgument(arg, unit, units);
-                        }
-                    }
-                    if(ret != null) {
-//                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
-                    }
-                }
-            }
-        }));
-
-        PackManager.v().runPacks();
-
-        // We don't need to write the output, but we do need this function to wait till the analysis
-        // Finishes so that we can print final results.
-        PackManager.v().writeOutput();
-        System.out.println("IHA filtered methods: " + ihaFiltered);
-    }
-
-    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, HashSet<SootMethod> nativeAnalysisRequired, ConcurrentHashMap<SootMethod, String> ihaFiltered) {
-        SootMethod cmet = getCallee(ie);
-        if(cmet == null) {
-            return;
-        }
-        if (cmet.isNative()) {
-            nativeAnalysisRequired.add(smet);
-        }
-
-        if (Utils.isComms(cmet)) {
-//            log.info("[IHA]" + clx + "/" + met + " calls " + cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-            ihaFiltered.put(smet, cmet.getSignature());
-        }
-    }
-
     public static void printArgTypes(List<Value> args) {
         String res = "";
         for (Value arg : args) {

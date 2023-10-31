@@ -1,14 +1,19 @@
 package org.example;
 
 import org.xmlpull.v1.XmlPullParserException;
+import soot.G;
+import soot.Scene;
 import soot.SootMethod;
 import soot.jimple.infoflow.InfoflowConfiguration;
 import soot.jimple.infoflow.android.InfoflowAndroidConfiguration;
 import soot.jimple.infoflow.android.manifest.ProcessManifest;
+import soot.options.Options;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.example.Main.log;
@@ -169,6 +174,27 @@ public class Utils {
 
     );
 
+    public static void setupSoot(String[] args) {
+        // Setup Soot.
+        G.reset();
+        Options.v().set_allow_phantom_refs(true);
+        Options.v().set_whole_program(true);
+        Options.v().set_prepend_classpath(true);
+        Options.v().set_validate(true);
+        Options.v().set_src_prec(Options.src_prec_apk);
+//        Options.v().set_output_format(Options.output_format_dex);
+        Options.v().set_output_format(Options.output_format_none);
+        Options.v().set_android_jars(args[0]);
+        Options.v().set_process_dir(Collections.singletonList(args[1]));
+        Options.v().set_include_all(true);
+        Options.v().set_process_multiple_dex(true);
+        Options.v().set_output_dir("./tmp");
+        Options.v().set_force_overwrite(true);
+
+//        Scene.v().setSootClassPath(Scene.v().getSootClassPath() + File.pathSeparator + args[0]);
+
+    }
+
     // TODO: Check MTP and media.tv packages.
     public static String getPackageName(String apkPath) {
         String packageName = "";
@@ -183,7 +209,7 @@ public class Utils {
 
     public static boolean isAndroidMethod(SootMethod sootMethod) {
         String clsSig = sootMethod.getDeclaringClass().getName();
-        List<String> androidPrefixPkgNames = Arrays.asList("android.", "com.google.android", "androidx.", "kotlinx.",
+        List<String> androidPrefixPkgNames = Arrays.asList("java.","android.", "com.google.android", "androidx.", "kotlinx.",
                 "kotlin.", "okhttp3");
         return androidPrefixPkgNames.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }

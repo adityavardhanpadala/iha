@@ -2,7 +2,7 @@
   <configuration default="false" name="iharun" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="org.example.Main" />
     <module name="iha" />
-    <option name="PROGRAM_PARAMETERS" value="&quot;C:\\Users\\padal\\android-platforms&quot; &quot;C:\\Users\\padal\\Desktop\\apks\\brunt.apk&quot;" />
+    <option name="PROGRAM_PARAMETERS" value="&quot;C:\\Users\\padal\\android-platforms&quot; &quot;d:\\apks\\brunt.apk&quot;" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
