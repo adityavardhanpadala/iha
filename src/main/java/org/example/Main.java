@@ -1,6 +1,7 @@
 package org.example;
 
 import soot.*;
+import soot.jimple.infoflow.collect.ConcurrentHashSet;
 import soot.options.Options;
 import soot.jimple.*;
 import soot.util.Chain;
@@ -84,7 +85,8 @@ public class Main {
         Scene.v().loadBasicClasses();
         Scene.v().loadDynamicClasses();
 
-        ConcurrentHashMap<SootMethod, String> ihaFiltered = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, String> ihaFiltered = new ConcurrentHashMap<>();
+        ConcurrentHashSet<String> injectedSinks = new ConcurrentHashSet<>();
         HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
 
         PackManager.v().getPack("jap").add(new Transform("jap.iha", new BodyTransformer() {
@@ -94,6 +96,11 @@ public class Main {
                 if (Utils.isAndroidMethod(smet)) {
                     return;
                 }
+
+                if (Utils.isInjectedSink(smet)) {
+                    injectedSinks.add(smet.getBytecodeSignature());
+                }
+
                 String met = smet.getName();
                 String clx = smet.getDeclaringClass().getName();
 
@@ -105,12 +112,12 @@ public class Main {
 
                     if (unit instanceof InvokeStmt is) {
                         InvokeExpr ie = is.getInvokeExpr();
-                        analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
+                        analyzeCallee(smet, met, clx, ie, ihaFiltered);
                     }
 
                     if (unit instanceof AssignStmt as) {
                         if (as.getRightOp() instanceof InvokeExpr ie) {
-                            analyzeCallee(smet, met, clx, ie, nativeAnalysisRequired, ihaFiltered);
+                            analyzeCallee(smet, met, clx, ie, ihaFiltered);
                         }
                     }
                 }
@@ -162,20 +169,20 @@ public class Main {
         // Finishes so that we can print final results.
         PackManager.v().writeOutput();
         System.out.println("IHA filtered methods: " + ihaFiltered);
+
+        System.out.println("Injected sinks: " + injectedSinks);
+
     }
 
-    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, HashSet<SootMethod> nativeAnalysisRequired, ConcurrentHashMap<SootMethod, String> ihaFiltered) {
+    private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, ConcurrentHashMap<String, String> ihaFiltered) {
         SootMethod cmet = getCallee(ie);
         if(cmet == null) {
             return;
         }
-        if (cmet.isNative()) {
-            nativeAnalysisRequired.add(smet);
-        }
-
+        // ['com.edimax.java.p2pJNI', 'jniCloseToU', ['int'], 'int']
         if (Utils.isComms(cmet)) {
 //            log.info("[IHA]" + clx + "/" + met + " calls " + cmet.getDeclaringClass().getName() + "/" + cmet.getName());
-            ihaFiltered.put(smet, cmet.getSignature());
+            ihaFiltered.put(smet.getBytecodeSignature(), cmet.getSignature());
         }
     }
 

@@ -188,6 +188,12 @@ public class Utils {
         return androidPrefixPkgNames.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
 
+    public static boolean isInjectedSink(SootMethod smet) {
+        // Check is the method has sinkmet in its lowercase name
+        String metName = smet.getName().toLowerCase();
+        return metName.contains("sinkmet");
+    }
+
     public static boolean isCommsa(SootMethod sootMethod) {
         if (sootMethod == null) {
             return false;
@@ -206,11 +212,11 @@ public class Utils {
         if (sootMethod == null) {
             return false;
         }
-    
+
         String clsName = sootMethod.getDeclaringClass().getName();
         String metName = sootMethod.getName();
         String signature = clsName + ": " + metName;
-        
+
         for (String netPkg : netPkgs) {
             if (signature.contains(netPkg) | netPkg.contains(signature)) {
                 return true;
