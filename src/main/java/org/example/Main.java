@@ -87,7 +87,7 @@ public class Main {
 
         ConcurrentHashMap<String, String> ihaFiltered = new ConcurrentHashMap<>();
         ConcurrentHashSet<String> injectedSinks = new ConcurrentHashSet<>();
-        HashSet<SootMethod> nativeAnalysisRequired = new HashSet<>();
+        ConcurrentHashSet<String> nativeAnalysisRequired = new ConcurrentHashSet<>();
 
         PackManager.v().getPack("jap").add(new Transform("jap.iha", new BodyTransformer() {
             @Override
@@ -127,51 +127,58 @@ public class Main {
         // For methods with JNI, we need to maintain a db of how these methods are used.
         // For now, we will just maintain a record of how many times the arguments to the
         // native method are read and written to.
-
-        PackManager.v().getPack("jap").add(new Transform("jap.native", new BodyTransformer() {
-            @Override
-            protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
-                Chain<Unit> units = body.getUnits();
-                SootMethod smet = body.getMethod();
-
-                if (Utils.isAndroidMethod(smet)) {
-                    return;
-                }
-
-                for(Unit unit: units) {
-                    InvokeExpr iex = null;
-                    ArgumentAnalysisResult ret = null;
-                    if(unit instanceof InvokeStmt) {
-                        iex = ((InvokeStmt) unit).getInvokeExpr();
-                    }
-                    else if (unit instanceof AssignStmt) {
-                        Value right = ((AssignStmt) unit).getRightOp();
-                        if(right instanceof InvokeExpr) {
-                            iex = (InvokeExpr) right;
-                        }
-                    }
-                    if (iex != null && iex.getMethod().isNative()) {
-//                        printArgTypes(iex.getArgs());
-                        for (Value arg : iex.getArgs()) {
-                            ret = analyzeArgument(arg, unit, units);
-                        }
-                    }
-                    if(ret != null) {
-//                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
-                    }
-                }
-            }
-        }));
+//        PackManager.v().getPack("jap").add(new Transform("jap.native", new BodyTransformer() {
+//            @Override
+//            protected void internalTransform(Body body, String phaseName, Map<String, String> map) {
+//                Chain<Unit> units = body.getUnits();
+//                SootMethod smet = body.getMethod();
+//
+//                if (Utils.isAndroidMethod(smet)) {
+//                    return;
+//                }
+//
+//
+//                for(Unit unit: units) {
+//                    InvokeExpr iex = null;
+//                    ArgumentAnalysisResult ret = null;
+//                    if(unit instanceof InvokeStmt) {
+//                        iex = ((InvokeStmt) unit).getInvokeExpr();
+//                    }
+//                    else if (unit instanceof AssignStmt) {
+//                        Value right = ((AssignStmt) unit).getRightOp();
+//                        if(right instanceof InvokeExpr) {
+//                            iex = (InvokeExpr) right;
+//                        }
+//                    }
+//
+//                    if (iex != null && (iex.getMethod().isNative())){
+//                        nativeAnalysisRequired.add(smet.getBytecodeSignature());
+//                    }
+//                    if(ret != null) {
+////                        log.info("[native] " + smet.getSignature() + "result: " + ret.toString());
+////                        log.info("[native] " + smet.getSignature());
+//                    }
+//                }
+//            }
+//        }));
 
         PackManager.v().runPacks();
 
         // We don't need to write the output, but we do need this function to wait till the analysis
         // Finishes so that we can print final results.
         PackManager.v().writeOutput();
+
+        for (SootClass sootClass : Scene.v().getApplicationClasses()) {
+            for (SootMethod method : sootClass.getMethods()) {
+                if (method.isNative()) {
+                    nativeAnalysisRequired.add(method.getBytecodeSignature());
+                }
+            }
+        }
+
         System.out.println("IHA filtered methods: " + ihaFiltered);
-
         System.out.println("Injected sinks: " + injectedSinks);
-
+        System.out.println("Native analysis required: " + nativeAnalysisRequired);
     }
 
     private static void analyzeCallee(SootMethod smet, String met, String clx, InvokeExpr ie, ConcurrentHashMap<String, String> ihaFiltered) {

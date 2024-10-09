@@ -184,7 +184,7 @@ public class Utils {
     public static boolean isAndroidMethod(SootMethod sootMethod) {
         String clsSig = sootMethod.getDeclaringClass().getName();
         List<String> androidPrefixPkgNames = Arrays.asList("android.", "com.google.android", "androidx.", "kotlinx.",
-                "kotlin.", "okhttp3");
+                "kotlin.", "okhttp3", "com.google.gson");
         return androidPrefixPkgNames.stream().map(clsSig::startsWith).reduce(false, (res, curr) -> res || curr);
     }
 
